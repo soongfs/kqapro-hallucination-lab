@@ -142,6 +142,89 @@
 
 ---
 
+## 数据流水线重构
+
+当前仓库已经开始用纯 Python 重构旧的 `kqa_v5 / kqa_v6` notebook 流程，新的数据产物改为三张语义化表：
+
+- `question_base.csv`
+- `gold_subgraphs.csv`
+- `onehop_by_seed.csv`
+
+目录结构如下：
+
+```text
+kqapro-hallucination-lab/
+  scripts/
+    export_question_base.py
+    build_gold_subgraphs.py
+    build_onehop_by_seed.py
+    build_all_processed.py
+  src/kqapro_hallucination/
+    io.py
+    schemas.py
+    kb_loader.py
+    sparql_engine.py
+    gold_subgraph_builder.py
+    onehop_builder.py
+    literal_utils.py
+    paths.py
+  data/processed/
+```
+
+### 三张表的职责
+
+- `question_base.csv`
+  - 基础问题表
+  - 包含 `idx/question/typ/choices/answer/q_ent/.../sparql`
+- `gold_subgraphs.csv`
+  - 由 SPARQL 实际执行得到的 gold 子图表
+  - 包含 `gold_subgraph_edges / gold_heads / gold_tails / gold_entities`
+- `onehop_by_seed.csv`
+  - 基于 gold 子图中出度不为 0 的节点构造的 1-hop 候选表
+  - 包含 `onehop_by_seed`
+
+### 运行方式
+
+单步运行：
+
+```bash
+python scripts/export_question_base.py
+python scripts/build_gold_subgraphs.py
+python scripts/build_onehop_by_seed.py
+```
+
+一键运行：
+
+```bash
+python scripts/build_all_processed.py
+```
+
+如果你希望显式指定输入输出路径，可以这样运行：
+
+```bash
+python scripts/export_question_base.py \
+  --input_path ../data/kqa_v2.csv \
+  --output_path data/processed/question_base.csv
+
+python scripts/build_gold_subgraphs.py \
+  --base_path data/processed/question_base.csv \
+  --output_path data/processed/gold_subgraphs.csv \
+  --checkpoint_path data/processed/gold_subgraphs.checkpoint.json
+
+python scripts/build_onehop_by_seed.py \
+  --gold_path data/processed/gold_subgraphs.csv \
+  --output_path data/processed/onehop_by_seed.csv
+```
+
+说明：
+
+- 脚本默认优先读取本仓库 `data/` 下的原始依赖。
+- 如果本仓库 `data/` 下没有原始文件，会回退尝试读取旧工作区中的 `../data/` 与 `../../kqa-pro/dataset/kb.json`。
+- 产物统一写入本仓库自己的 `data/processed/`。
+- `data/processed/*.csv` 属于派生产物，默认不纳入 git 跟踪。
+
+---
+
 ## 备注
 
 - 本仓库是从旧仓库中拆分出来的“干净版本”起点。

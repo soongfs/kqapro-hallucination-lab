@@ -19,6 +19,7 @@ GOLD_SUBGRAPH_COLUMNS = [
     "gold_heads",
     "gold_tails",
     "gold_entities",
+    "gold_question_nodes",
 ]
 
 ONEHOP_COLUMNS = [

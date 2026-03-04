@@ -53,8 +53,14 @@ def main():
     question_df = load_processed_table(
         args.data_dir,
         "question_base.csv",
-        ["idx", "question", "typ", "q_ent"],
+        ["idx", "question", "typ"],
     )
+    gold_df = load_processed_table(
+        args.data_dir,
+        "gold_subgraphs.csv",
+        ["idx", "gold_question_nodes"],
+    )
+    question_df = question_df.merge(gold_df, on="idx", how="inner", validate="one_to_one")
     question_df = filter_by_excluded_types(question_df, args.exclude_types)
     question_df = limit_df(question_df, args.limit)
 
@@ -64,12 +70,18 @@ def main():
         shot_df = load_processed_table(
             args.shot_data_dir,
             "question_base.csv",
-            ["idx", "question", "typ", "q_ent"],
+            ["idx", "question", "typ"],
         )
+        shot_gold_df = load_processed_table(
+            args.shot_data_dir,
+            "gold_subgraphs.csv",
+            ["idx", "gold_question_nodes"],
+        )
+        shot_df = shot_df.merge(shot_gold_df, on="idx", how="inner", validate="one_to_one")
         shot_df = filter_by_excluded_types(shot_df, args.exclude_types)
 
         def is_valid(row):
-            entities = clean_entities(parse_list_field(row.get("q_ent", "[]")))
+            entities = clean_entities(parse_list_field(row.get("gold_question_nodes", "[]")))
             return bool(entities)
 
         shot_rows = take_first_n_valid(
@@ -81,7 +93,7 @@ def main():
             shots.append(
                 (
                     row["question"],
-                    clean_entities(parse_list_field(row.get("q_ent", "[]"))),
+                    clean_entities(parse_list_field(row.get("gold_question_nodes", "[]"))),
                 )
             )
         warn_insufficient_shots("entity", args.few_shot, len(shots))
@@ -97,7 +109,7 @@ def main():
     prompt_records = []
     for _, row in tqdm(question_df.iterrows(), total=len(question_df), desc="Entity Eval"):
         question = row["question"]
-        gold_entities = clean_entities(parse_list_field(row.get("q_ent", "[]")))
+        gold_entities = clean_entities(parse_list_field(row.get("gold_question_nodes", "[]")))
         prompt_text = build_entity_prompt(question, shots)
         res = llm.invoke(prompt_text)
         res_text = res if isinstance(res, str) else getattr(res, "content", str(res))

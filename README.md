@@ -156,6 +156,9 @@
 - `head`：从候选实体中选择推理起点
 - `reason`：从 1-hop 候选边中选择支持推理的边
 
+其中 `entity` 任务的 gold 已不再使用旧的 `q_ent`。  
+当前口径改为：从 `sparql` 中抽取**被常量约束且能和问题文本直接对齐的锚点节点**，并写入 `gold_subgraphs.csv` 的 `gold_question_nodes` 列。
+
 ### 数据输入
 
 默认读取以下 processed 数据：
@@ -163,6 +166,11 @@
 - `data/processed/question_base.csv`
 - `data/processed/gold_subgraphs.csv`
 - `data/processed/onehop_by_seed.csv`
+
+其中：
+
+- `question_base.csv` 中的 `q_ent` 仅作为历史字段保留
+- `graph_entity_eval.py` 实际读取的是 `gold_subgraphs.csv` 中的 `gold_question_nodes`
 
 ### 运行顺序
 
@@ -276,7 +284,7 @@ kqapro-hallucination-lab/
   - 包含 `idx/question/typ/choices/answer/q_ent/.../sparql`
 - `gold_subgraphs.csv`
   - 由 SPARQL 实际执行得到的 gold 子图表
-  - 包含 `gold_subgraph_edges / gold_heads / gold_tails / gold_entities`
+  - 包含 `gold_subgraph_edges / gold_heads / gold_tails / gold_entities / gold_question_nodes`
 - `onehop_by_seed.csv`
   - 基于 gold 子图中出度不为 0 的节点构造的 1-hop 候选表
   - 包含 `onehop_by_seed`

@@ -3,11 +3,11 @@ name = "kqapro-hallucination-lab"
 version = "0.1.0"
 description = "Reproducible KQA-Pro data pipeline for hallucination-signal experiments."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "langchain-community>=0.4.1",
     "langchain-core>=1.1.0",
-    "numpy>=2.3.0",
+    "numpy>=1.26,<2.3",
     "pandas>=2.3.3",
     "pyoxigraph>=0.5.5",
     "tqdm>=4.67.1",
@@ -23,3 +23,8 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv]
+environments = [
+    "sys_platform == 'linux' and python_version >= '3.12' and python_version < '3.14'",
+]

@@ -5,10 +5,13 @@ description = "Reproducible KQA-Pro data pipeline for hallucination-signal exper
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "langchain-community>=0.4.1",
+    "langchain-core>=1.1.0",
     "numpy>=2.3.0",
     "pandas>=2.3.3",
     "pyoxigraph>=0.5.5",
     "tqdm>=4.67.1",
+    "vllm>=0.13.0",
 ]
 
 [build-system]

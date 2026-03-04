@@ -142,6 +142,104 @@
 
 ---
 
+## Graph Evaluation
+
+当前仓库中的图侧评测将拆分为 3 个独立脚本：
+
+- `scripts/graph_entity_eval.py`
+- `scripts/graph_head_eval.py`
+- `scripts/graph_reason_eval.py`
+
+三者分别对应：
+
+- `entity`：从问题中抽取实体
+- `head`：从候选实体中选择推理起点
+- `reason`：从 1-hop 候选边中选择支持推理的边
+
+### 数据输入
+
+默认读取以下 processed 数据：
+
+- `data/processed/question_base.csv`
+- `data/processed/gold_subgraphs.csv`
+- `data/processed/onehop_by_seed.csv`
+
+### 运行顺序
+
+标准执行顺序是：
+
+```bash
+python scripts/graph_entity_eval.py \
+  --model_path meta-llama/Llama-3.1-8B-Instruct \
+  --data_dir data/processed \
+  --output_dir output
+
+python scripts/graph_head_eval.py \
+  --model_path meta-llama/Llama-3.1-8B-Instruct \
+  --data_dir data/processed \
+  --entity_result_path output/graph_entity_xxx.csv \
+  --output_dir output
+
+python scripts/graph_reason_eval.py \
+  --model_path meta-llama/Llama-3.1-8B-Instruct \
+  --data_dir data/processed \
+  --output_dir output
+```
+
+### few-shot 规则
+
+为了和 `lm-evaluation-harness` 中的 KQA 任务保持一致：
+
+- `--few_shot` 默认值为 `0`
+- 如果启用 few-shot，则示例来自 `train`
+- few-shot 选择方式是 `first_n`
+
+也就是说：
+
+- 不从当前评测集抽示例
+- 不做随机采样
+- 直接按 `shot_data_dir` 中文件顺序取前 `N` 个有效样本
+
+示例：
+
+```bash
+python scripts/graph_entity_eval.py \
+  --model_path meta-llama/Llama-3.1-8B-Instruct \
+  --data_dir data/processed \
+  --shot_data_dir ../train_processed \
+  --few_shot 3 \
+  --output_dir output
+```
+
+### 关键参数
+
+- `--data_dir`
+  - 当前评测集对应的 processed 数据目录
+- `--shot_data_dir`
+  - few-shot 示例所在的 processed 数据目录
+  - 仅当 `--few_shot > 0` 时需要
+- `--entity_result_path`
+  - 仅 `graph_head_eval.py` 需要
+  - 用于 predlist 模式读取 entity 脚本输出
+- `--exclude_types`
+  - 过滤指定 typ 标签
+
+### 输出文件
+
+三个脚本默认分别输出：
+
+- `graph_entity_<timestamp>.csv`
+- `graph_head_<timestamp>.csv`
+- `graph_reason_<timestamp>.csv`
+
+字段策略：
+
+- 主 CSV 只保留 gold / pred / 指标 / `response_raw`
+- 不把 prompt 或 debug 字段写入主 CSV
+- 如果加 `--debug_prompts`，则额外生成 `.prompts.jsonl` sidecar 文件
+
+---
+
 ## 数据流水线重构
 
 当前仓库已经开始用纯 Python 重构旧的 `kqa_v5 / kqa_v6` notebook 流程，新的数据产物改为三张语义化表：

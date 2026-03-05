@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from .kb_loader import DataForSPARQL
 from .literal_utils import serialize_literal
-from .question_node_extractor import extract_question_nodes
+from .question_node_extractor import NameMentionAligner, extract_question_anchors
 from .sparql_engine import build_or_load_engine, extract_subgraph
 
 
@@ -64,6 +64,7 @@ def _save_checkpoint(
     tails_list: list[str],
     entities_list: list[str],
     question_nodes_list: list[str],
+    question_mentions_list: list[str],
 ) -> None:
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     with checkpoint_path.open("w") as f:
@@ -75,6 +76,7 @@ def _save_checkpoint(
                 "tails": tails_list,
                 "entities": entities_list,
                 "question_nodes": question_nodes_list,
+                "question_mentions": question_mentions_list,
             },
             f,
         )
@@ -86,24 +88,42 @@ def build_gold_subgraphs_df(
     oxigraph_store_path: str | Path,
     checkpoint_path: str | Path,
     save_every: int = 200,
+    name_embed_model: str = "all-MiniLM-L6-v2",
+    name_embed_threshold: float = 0.78,
+    name_embed_margin: float = 0.03,
+    name_span_max_tokens: int = 8,
 ) -> pd.DataFrame:
     kg = DataForSPARQL(str(kb_json_path))
     engine = build_or_load_engine(kg, store_path=str(oxigraph_store_path))
     uri_to_name = build_uri_to_name(kg)
+    name_aligner = NameMentionAligner(
+        model_name=name_embed_model,
+        similarity_threshold=name_embed_threshold,
+        similarity_margin=name_embed_margin,
+        max_span_tokens=name_span_max_tokens,
+    )
 
     checkpoint_path = Path(checkpoint_path)
     checkpoint = _load_checkpoint(checkpoint_path)
     total = len(base_df)
-    if checkpoint and "question_nodes" in checkpoint:
+    if checkpoint and "question_nodes" in checkpoint and "question_mentions" in checkpoint:
         start = checkpoint["done"]
         subgraphs = checkpoint["subgraphs"]
         heads_list = checkpoint["heads"]
         tails_list = checkpoint["tails"]
         entities_list = checkpoint["entities"]
         question_nodes_list = checkpoint["question_nodes"]
+        question_mentions_list = checkpoint["question_mentions"]
     else:
         start = 0
-        subgraphs, heads_list, tails_list, entities_list, question_nodes_list = [], [], [], [], []
+        subgraphs, heads_list, tails_list, entities_list, question_nodes_list, question_mentions_list = (
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
 
     for i in tqdm(range(start, total), desc="Extracting subgraphs", initial=start, total=total):
         sparql = base_df.iloc[i].get("sparql", "")
@@ -114,12 +134,17 @@ def build_gold_subgraphs_df(
             triples = extract_subgraph(sparql, engine, uri_to_name, include_id=True)
 
         heads, tails, entities = derive_heads_tails_entities(triples)
-        question_nodes = extract_question_nodes(sparql, question)
+        question_nodes, question_mentions = extract_question_anchors(
+            sparql,
+            question,
+            name_aligner=name_aligner,
+        )
         subgraphs.append(serialize_literal(triples))
         heads_list.append(serialize_literal(heads))
         tails_list.append(serialize_literal(tails))
         entities_list.append(serialize_literal(entities))
         question_nodes_list.append(serialize_literal(question_nodes))
+        question_mentions_list.append(serialize_literal(question_mentions))
 
         if (i + 1) % save_every == 0:
             _save_checkpoint(
@@ -130,6 +155,7 @@ def build_gold_subgraphs_df(
                 tails_list,
                 entities_list,
                 question_nodes_list,
+                question_mentions_list,
             )
 
     _save_checkpoint(
@@ -140,6 +166,7 @@ def build_gold_subgraphs_df(
         tails_list,
         entities_list,
         question_nodes_list,
+        question_mentions_list,
     )
 
     gold_df = base_df.loc[:, ["idx", "question", "typ"]].copy()
@@ -148,6 +175,7 @@ def build_gold_subgraphs_df(
     gold_df["gold_tails"] = tails_list
     gold_df["gold_entities"] = entities_list
     gold_df["gold_question_nodes"] = question_nodes_list
+    gold_df["gold_question_mentions"] = question_mentions_list
 
     if checkpoint_path.exists():
         checkpoint_path.unlink()

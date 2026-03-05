@@ -13,7 +13,7 @@ if str(SRC) not in sys.path:
 from kqapro_hallucination.eval_common import (  # noqa: E402
     clean_entities,
     extract_first_list,
-    f1_from_sets,
+    f1_from_entity_anchors,
     filter_by_excluded_types,
     limit_df,
     load_processed_table,
@@ -22,7 +22,6 @@ from kqapro_hallucination.eval_common import (  # noqa: E402
     parse_list_field,
     require_shot_data_dir,
     take_first_n_valid,
-    to_name_set,
     warn_insufficient_shots,
     write_prompt_sidecar,
 )
@@ -58,7 +57,7 @@ def main():
     gold_df = load_processed_table(
         args.data_dir,
         "gold_subgraphs.csv",
-        ["idx", "gold_question_nodes"],
+        ["idx", "gold_question_nodes", "gold_question_mentions"],
     )
     question_df = question_df.merge(gold_df, on="idx", how="inner", validate="one_to_one")
     question_df = filter_by_excluded_types(question_df, args.exclude_types)
@@ -75,13 +74,13 @@ def main():
         shot_gold_df = load_processed_table(
             args.shot_data_dir,
             "gold_subgraphs.csv",
-            ["idx", "gold_question_nodes"],
+            ["idx", "gold_question_nodes", "gold_question_mentions"],
         )
         shot_df = shot_df.merge(shot_gold_df, on="idx", how="inner", validate="one_to_one")
         shot_df = filter_by_excluded_types(shot_df, args.exclude_types)
 
         def is_valid(row):
-            entities = clean_entities(parse_list_field(row.get("gold_question_nodes", "[]")))
+            entities = clean_entities(parse_list_field(row.get("gold_question_mentions", "[]")))
             return bool(entities)
 
         shot_rows = take_first_n_valid(
@@ -93,7 +92,7 @@ def main():
             shots.append(
                 (
                     row["question"],
-                    clean_entities(parse_list_field(row.get("gold_question_nodes", "[]"))),
+                    clean_entities(parse_list_field(row.get("gold_question_mentions", "[]"))),
                 )
             )
         warn_insufficient_shots("entity", args.few_shot, len(shots))
@@ -109,22 +108,24 @@ def main():
     prompt_records = []
     for _, row in tqdm(question_df.iterrows(), total=len(question_df), desc="Entity Eval"):
         question = row["question"]
-        gold_entities = clean_entities(parse_list_field(row.get("gold_question_nodes", "[]")))
+        gold_nodes = clean_entities(parse_list_field(row.get("gold_question_nodes", "[]")))
+        gold_mentions = clean_entities(parse_list_field(row.get("gold_question_mentions", "[]")))
         prompt_text = build_entity_prompt(question, shots)
         res = llm.invoke(prompt_text)
         res_text = res if isinstance(res, str) else getattr(res, "content", str(res))
         pred_entities = clean_entities(extract_first_list(res_text))
 
-        precision, recall, f1 = f1_from_sets(
-            to_name_set(pred_entities),
-            to_name_set(gold_entities),
+        precision, recall, f1 = f1_from_entity_anchors(
+            pred_entities,
+            gold_nodes,
+            gold_mentions,
         )
 
         out_rows.append(
             {
                 "idx": row["idx"],
                 "question": question,
-                "gold_entities": str(gold_entities),
+                "gold_entities": str(gold_mentions),
                 "pred_entities": str(pred_entities),
                 "entity_precision": precision,
                 "entity_recall": recall,

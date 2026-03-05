@@ -39,6 +39,10 @@ def main():
     parser.add_argument("--facts_path", default=str(default_facts_path()))
     parser.add_argument("--topk", type=int, default=30)
     parser.add_argument("--random_seed", type=int, default=42)
+    parser.add_argument("--name_embed_model", default="all-MiniLM-L6-v2")
+    parser.add_argument("--name_embed_threshold", type=float, default=0.78)
+    parser.add_argument("--name_embed_margin", type=float, default=0.03)
+    parser.add_argument("--name_span_max_tokens", type=int, default=8)
     args = parser.parse_args()
 
     ensure_processed_dirs()
@@ -53,6 +57,10 @@ def main():
         oxigraph_store_path=args.oxigraph_store_path,
         checkpoint_path=args.checkpoint_path,
         save_every=args.save_every,
+        name_embed_model=args.name_embed_model,
+        name_embed_threshold=args.name_embed_threshold,
+        name_embed_margin=args.name_embed_margin,
+        name_span_max_tokens=args.name_span_max_tokens,
     )
     write_csv(gold_df, PROCESSED_DIR / "gold_subgraphs.csv")
 

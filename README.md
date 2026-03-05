@@ -157,7 +157,19 @@
 - `reason`：从 1-hop 候选边中选择支持推理的边
 
 其中 `entity` 任务的 gold 已不再使用旧的 `q_ent`。  
-当前口径改为：从 `sparql` 中抽取**被常量约束且能和问题文本直接对齐的锚点节点**，并写入 `gold_subgraphs.csv` 的 `gold_question_nodes` 列。
+当前口径改为从 `sparql` 中抽取两层锚点信息：
+
+- `gold_question_nodes`
+  - SPARQL 中的 canonical 锚点节点
+- `gold_question_mentions`
+  - 问题文本中的 surface mentions
+
+其中：
+
+- 只有 `pred:name` 常量会做 embedding-based span alignment
+- `pred:value / pred:year / pred:date / FILTER` 数值仍然走规则匹配
+- `graph_entity_eval.py` 主要按 `gold_question_mentions` 评测
+- 但模型若直接输出 canonical node，也会被视为等价命中同一个 anchor
 
 ### 数据输入
 
@@ -170,7 +182,9 @@
 其中：
 
 - `question_base.csv` 中的 `q_ent` 仅作为历史字段保留
-- `graph_entity_eval.py` 实际读取的是 `gold_subgraphs.csv` 中的 `gold_question_nodes`
+- `graph_entity_eval.py` 实际读取的是 `gold_subgraphs.csv` 中的
+  - `gold_question_nodes`
+  - `gold_question_mentions`
 
 ### 运行顺序
 
@@ -245,6 +259,7 @@ python scripts/graph_entity_eval.py \
 - 主 CSV 只保留 gold / pred / 指标 / `response_raw`
 - 不把 prompt 或 debug 字段写入主 CSV
 - 如果加 `--debug_prompts`，则额外生成 `.prompts.jsonl` sidecar 文件
+- `graph_entity_*.csv` 中的 `gold_entities` 当前保存的是 `gold_question_mentions`
 
 ---
 
@@ -284,7 +299,13 @@ kqapro-hallucination-lab/
   - 包含 `idx/question/typ/choices/answer/q_ent/.../sparql`
 - `gold_subgraphs.csv`
   - 由 SPARQL 实际执行得到的 gold 子图表
-  - 包含 `gold_subgraph_edges / gold_heads / gold_tails / gold_entities / gold_question_nodes`
+  - 包含
+    - `gold_subgraph_edges`
+    - `gold_heads`
+    - `gold_tails`
+    - `gold_entities`
+    - `gold_question_nodes`
+    - `gold_question_mentions`
 - `onehop_by_seed.csv`
   - 基于 gold 子图中出度不为 0 的节点构造的 1-hop 候选表
   - 包含 `onehop_by_seed`
@@ -315,7 +336,11 @@ python scripts/export_question_base.py \
 python scripts/build_gold_subgraphs.py \
   --base_path data/processed/question_base.csv \
   --output_path data/processed/gold_subgraphs.csv \
-  --checkpoint_path data/processed/gold_subgraphs.checkpoint.json
+  --checkpoint_path data/processed/gold_subgraphs.checkpoint.json \
+  --name_embed_model all-MiniLM-L6-v2 \
+  --name_embed_threshold 0.78 \
+  --name_embed_margin 0.03 \
+  --name_span_max_tokens 8
 
 python scripts/build_onehop_by_seed.py \
   --gold_path data/processed/gold_subgraphs.csv \

@@ -71,6 +71,10 @@ def to_name_only_set(names: Iterable[Any]) -> set[str]:
     }
 
 
+def _normalize_entity_anchor_text(text: Any) -> str:
+    return normalize_name(strip_qid_suffix(text))
+
+
 def f1_from_sets(pred: set[str], gold: set[str]) -> tuple[float, float, float]:
     if not pred and not gold:
         return 1.0, 1.0, 1.0
@@ -79,6 +83,59 @@ def f1_from_sets(pred: set[str], gold: set[str]) -> tuple[float, float, float]:
     inter = len(pred & gold)
     precision = inter / len(pred) if pred else 0.0
     recall = inter / len(gold) if gold else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+    return precision, recall, f1
+
+
+def f1_from_entity_anchors(
+    pred_entities: list[Any],
+    gold_nodes: list[Any],
+    gold_mentions: list[Any],
+) -> tuple[float, float, float]:
+    if len(gold_nodes) != len(gold_mentions):
+        raise ValueError("gold_nodes and gold_mentions must have the same length")
+
+    if not pred_entities and not gold_nodes:
+        return 1.0, 1.0, 1.0
+    if not pred_entities or not gold_nodes:
+        return 0.0, 0.0, 0.0
+
+    anchors = []
+    for node, mention in zip(gold_nodes, gold_mentions):
+        normalized = {
+            _normalize_entity_anchor_text(node),
+            _normalize_entity_anchor_text(mention),
+        }
+        normalized.discard("")
+        if normalized:
+            anchors.append(normalized)
+
+    if not anchors:
+        return (1.0, 1.0, 1.0) if not pred_entities else (0.0, 0.0, 0.0)
+
+    matched = [False] * len(anchors)
+    tp = 0
+    fp = 0
+    for pred in pred_entities:
+        normalized_pred = _normalize_entity_anchor_text(pred)
+        if not normalized_pred:
+            continue
+        matched_idx = None
+        for index, allowed in enumerate(anchors):
+            if matched[index]:
+                continue
+            if normalized_pred in allowed:
+                matched_idx = index
+                break
+        if matched_idx is None:
+            fp += 1
+            continue
+        matched[matched_idx] = True
+        tp += 1
+
+    fn = len(anchors) - tp
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / len(anchors) if anchors else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
     return precision, recall, f1
 
